@@ -14,6 +14,42 @@ using Microsoft.AspNet.Identity.EntityFramework;
 using Microsoft.Owin.Security.OAuth;
 using System.Security.Claims;
 
+/*
+ * This file defines a few classes for account authentication and authorization.
+ * 
+ * 1. iS3User and iS3UserManager for account control
+ * 2. iS3OAuthServerProvider for provding authenticaiton service
+ * 3. iS3OAuthDbContext and iS3OAuthDbInitializer for managing accounts in database
+ * 4. AccountsController for providing account control WebAPI
+ * 
+ * Account api usage examples in ubuntu-linux shell:
+ * 
+port=8080
+curl http://localhost:$port/api/Accounts/GetUsers    
+    [=>will be refused]
+curl -d 'grant_type=password&username=Admin&password=iS3Admin' http://localhost:$port/Token
+    [=>will return token for Admin]
+token1=$[token from above responses]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers
+    [=>will succeeded, 1 user]
+curl -d "Username=lxj&Password=lxjsPassword&Role=User" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser
+    [=>will succeeded, 1 user added]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers
+    [=>will succeeded, 2 users]
+curl -d "Username=lxj&Password=" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/RemoveUser
+    [=>will succeeded, 1 user removed]
+curl -d '{"Username":"lxj","Password":"lxjsPassword","Role":"User"}' -H "Content-Type:application/json" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser 
+     [=>will fail, user exists]
+curl -d 'grant_type=password&Username=lxj&Password=lxjsPassword' http://localhost:$port/Token
+     [=>will return token for lxj]
+token2=$[token from above responses]
+curl -H "Authorization:Bearer $token2" http://localhost:$port/api/Accounts/GetUsers
+     [=>will be denied because for insufficient authorization]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers 
+     [=>will succeeded, 2 users]
+* 
+*/
+
 namespace iS3.MiniServer
 {
     // iS3User class is for user authentication such as register and login.
@@ -23,7 +59,7 @@ namespace iS3.MiniServer
     {
         public iS3User() : base() { Password = ""; Role = ""; }
 
-        // Password and Role is for admin to register new user from remote.
+        // Password and Role is for admin to register new user remotely.
         // For example, we can register a new user
         //   UserName=john, Password=johnsPassword, Role=User
         // using following command remotely:
@@ -189,6 +225,7 @@ namespace iS3.MiniServer
     // AccountsController class is for managing user accounts remotely using WebAPI.
     // To this point, we only provide the following WebAPIs：
     //   api/Accounts/GetUsers
+    //   api/Accounts/GetUsersFullInfo
     //   api/Accounts/AddUser
     //   api/Accounts/RemoveUser
     //
@@ -197,6 +234,7 @@ namespace iS3.MiniServer
     //     for more detail on how to login as Admin.
     // 
     [Authorize(Roles = "Admin")]
+    [RoutePrefix("api/Accounts")]
     public class AccountsController : ApiController
     {
         // Get the globle install of iS3OAuthDbContext class.
@@ -209,11 +247,25 @@ namespace iS3.MiniServer
             }
         }
 
-        public IEnumerable<iS3User> GetUsers()
+        [HttpGet]
+        [Route("GetUsers")]
+        public IHttpActionResult GetUsers()
         {
-            return dbContext.Users;
+            List<string> names = new List<string>();
+            foreach (var user in dbContext.Users)
+                names.Add(user.UserName);
+            return Ok(names);
         }
 
+        [HttpGet]
+        [Route("GetUsersFullInfo")]
+        public IHttpActionResult GetUsersFullInfo()
+        {
+            return Ok(dbContext.Users);
+        }
+
+        [HttpPost]
+        [Route("AddUser")]
         public async Task<IHttpActionResult> AddUser(iS3User user)
         {
             if (user == null)
@@ -249,6 +301,8 @@ namespace iS3.MiniServer
             return Ok(success);
         }
 
+        [HttpPost]
+        [Route("RemoveUser")]
         public async Task<IHttpActionResult> RemoveUser(iS3User user)
         {
             if (user == null)
@@ -265,32 +319,9 @@ namespace iS3.MiniServer
             dbContext.Users.Remove(result);
             await dbContext.SaveChangesAsync();
 
-            string success = string.Format("User {0} removed successfully.", user);
+            string success = string.Format("User {0} removed successfully.", user.UserName);
             return Ok(success);
         }
 
     }
 }
-
-
-/*
- * The following commands can help your to test the above codes.
- * 
-port=8080
-curl http://localhost:$port/api/Accounts/GetUsers    [=>will be refused]
-curl -d 'grant_type=password&username=Admin&password=iS3Admin' http://localhost:$port/Token    [=>will return token]
-token1=$[token from above responses]
-curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers    [=>will succeeded, 1 user]
-curl -d "Username=lxj&Password=lxjsPassword&Role=User" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser
-curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers    [=>will succeeded, 2 users]
-curl -d "Username=lxj&Password=" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/RemoveUser
-
-curl -d "Username=lxj&Password=lxjsPassword&Role=User" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser
-curl -d 'grant_type=password&Username=lxj&Password=lxjsPassword' http://localhost:$port/Token
-token2=$[token from above responses]
-curl -H "Authorization:Bearer $token2" http://localhost:$port/api/Accounts/GetUsers [=>will be denied because for insufficient authorization]
-
-curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers [=>will succeeded, 2 users]
- *
- *
- */

@@ -44,15 +44,16 @@ namespace iS3.MiniServer
         private HttpConfiguration ConfigureWebApi()
         {
             var config = new HttpConfiguration();
-            config.Routes.MapHttpRoute(
-                "ActionApi",
-                "api/{controller}/{action}/{id}",
-                new { controller= "Accounts", id = RouteParameter.Optional });
+
+            config.MapHttpAttributeRoutes();
+
             config.Routes.MapHttpRoute(
                 "DefaultApi",
                 "api/{controller}/{id}",
                 new { id = RouteParameter.Optional });
+
             return config;
         }
     }
+
 }
