@@ -32,13 +32,13 @@ curl -d 'grant_type=password&username=Admin&password=iS3Admin' http://localhost:
 token1=$[token from above responses]
 curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers
     [=>will succeeded, 1 user]
-curl -d "Username=lxj&Password=lxjsPassword&Role=User" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser
+curl -d "Username=lxj&Password=lxjsPassword&ConfirmPassword=lxjsPassword&Role=User" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser
     [=>will succeeded, 1 user added]
 curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers
     [=>will succeeded, 2 users]
-curl -d "Username=lxj&Password=" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/RemoveUser
+curl -d "Username=lxj" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/RemoveUser
     [=>will succeeded, 1 user removed]
-curl -d '{"Username":"lxj","Password":"lxjsPassword","Role":"User"}' -H "Content-Type:application/json" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser 
+curl -d '{"Username":"lxj","Password":"lxjsPassword", "ConfirmPassword":"lxjsPassword", "Role":"User"}' -H "Content-Type:application/json" -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/AddUser 
      [=>will fail, user exists]
 curl -d 'grant_type=password&Username=lxj&Password=lxjsPassword' http://localhost:$port/Token
      [=>will return token for lxj]
@@ -47,25 +47,33 @@ curl -H "Authorization:Bearer $token2" http://localhost:$port/api/Accounts/GetUs
      [=>will be denied because for insufficient authorization]
 curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Accounts/GetUsers 
      [=>will succeeded, 2 users]
+curl -H "Authorization:Bearer $token2" -d "OldPassword=lxjsPassword&Password=NewPassword&ConfirmPassword=NewPassword" http://localhost:$port/api/Accounts/ChangePassword
+     [=>will succeeded, password changed (for lxj)]
 * 
 */
 
 namespace iS3.MiniServer
 {
+    public static class iS3ClaimTypes
+    {
+        public const string AuthorizedProjects = "iS3AuthorizedProjects";
+
+    }
+
     // iS3User class is for user authentication such as register and login.
     // iS3User class inherits from Microsoft.AspNet.IdentityUser.
     // 
     public class iS3User : IdentityUser
     {
-        public iS3User() : base() { Password = ""; Role = ""; }
+        public iS3User() : base() {  }
 
         // Password and Role is for admin to register new user remotely.
         // For example, we can register a new user
-        //   UserName=john, Password=johnsPassword, Role=User
+        //   UserName=john, Password=johnsPassword, ConfirmPassword=johnsPassword, Role=User
         // using following command remotely:
         //
-        //   curl -d "Username=john&Password=johnsPassword&Role=User" 
-        //        -H "Authorization:Bearer $token" http://$ip:$port/api/Accounts/Add
+        //   curl -d "Username=john&Password=johnsPassword&ConfirmPassword=johnsPassword&Role=User" 
+        //        -H "Authorization:Bearer $token" http://$ip:$port/api/Accounts/AddUser
         //
         // In above, we use the 'curl' command. $ip is the address of host, $port
         //   is the host port, $token is the token of a user with Admin role.
@@ -82,7 +90,12 @@ namespace iS3.MiniServer
         //
 
         public string Password { get; set; }
+        public string ConfirmPassword { get; set; }
+        public string OldPassword { get; set; }
         public string Role { get; set; }
+
+        // projects that the user can visit
+        public string AuthorizedProjects { get; set; }
     }
 
 
@@ -189,8 +202,8 @@ namespace iS3.MiniServer
     //     Therefore, avoid use DropCreateDatabaseAlways as base class.
     // 
     public class iS3OAuthDbInitializer
-    //: DropCreateDatabaseIfModelChanges<iS3OAuthDbContext>
-    : DropCreateDatabaseAlways<iS3OAuthDbContext>
+    : DropCreateDatabaseIfModelChanges<iS3OAuthDbContext>
+    //: DropCreateDatabaseAlways<iS3OAuthDbContext>
     {
         // Seed a default user: Admin
         //   Username=Admin, Password=iS3Admin, Role=Admin
@@ -223,18 +236,23 @@ namespace iS3.MiniServer
     }
 
     // AccountsController class is for managing user accounts remotely using WebAPI.
-    // To this point, we only provide the following WebAPIs：
+    // To this point, we provide the following WebAPIs：
     //   api/Accounts/GetUsers
     //   api/Accounts/GetUsersFullInfo
     //   api/Accounts/AddUser
     //   api/Accounts/RemoveUser
+    //   api/Accounts/ChangePassword
     //
     // Note:
-    //   This WebAPIs can only be invoked by a user with Admin role, see iS3User class
-    //     for more detail on how to login as Admin.
+    //   These WebAPIs can only be invoked by an authorized user, and Admin role 
+    //     is required to invoke:
+    //        api/Accounts/GetUsers
+    //        api/Accounts/GetUsersFullInfo
+    //        api/Accounts/AddUser
+    //        api/Accounts/RemoveUser
     // 
-    [Authorize(Roles = "Admin")]
     [RoutePrefix("api/Accounts")]
+    [Authorize]
     public class AccountsController : ApiController
     {
         // Get the globle install of iS3OAuthDbContext class.
@@ -249,6 +267,7 @@ namespace iS3.MiniServer
 
         [HttpGet]
         [Route("GetUsers")]
+        [Authorize(Roles = "Admin")]
         public IHttpActionResult GetUsers()
         {
             List<string> names = new List<string>();
@@ -259,6 +278,7 @@ namespace iS3.MiniServer
 
         [HttpGet]
         [Route("GetUsersFullInfo")]
+        [Authorize(Roles = "Admin")]
         public IHttpActionResult GetUsersFullInfo()
         {
             return Ok(dbContext.Users);
@@ -266,23 +286,38 @@ namespace iS3.MiniServer
 
         [HttpPost]
         [Route("AddUser")]
+        [Authorize(Roles = "Admin")]
+        // Add a new user according to:
+        //      UserName, Password, Role
+        //
         public async Task<IHttpActionResult> AddUser(iS3User user)
         {
             if (user == null)
             {
                 return BadRequest("Argument Null");
             }
+            if (user.Password != user.ConfirmPassword)
+            {
+                return BadRequest("Password not consistent");
+            }
+
+            string password = user.Password;
+            // Erase the password for safety.
+            user.Password = null;
+            user.ConfirmPassword = null;
+
             var userExists = await dbContext.Users.AnyAsync(c => c.UserName == user.UserName);
 
             if (userExists)
             {
+                //var exist = await dbContext.Users.FirstAsync(c => c.UserName == user.UserName);
                 return BadRequest("User already exists");
             }
 
             var manager = new iS3UserManager(
                 new UserStore<iS3User>(dbContext));
 
-            var result = await manager.CreateAsync(user, user.Password);
+            var result = await manager.CreateAsync(user, password);
             if (!result.Succeeded)
             {
                 return BadRequest(result.Errors.FirstOrDefault());
@@ -294,6 +329,13 @@ namespace iS3.MiniServer
             await manager.AddClaimAsync(user.Id,
                 new Claim(ClaimTypes.Role, user.Role));
 
+            // add a claim to Identity.Claims
+            //   Claim.Type = iS3ClaimTypes.AuthorizedProjects,
+            //   Claim.Value = user.AuthorizedProjects
+            //
+            await manager.AddClaimAsync(user.Id,
+                new Claim(iS3ClaimTypes.AuthorizedProjects, user.AuthorizedProjects));
+
             await dbContext.SaveChangesAsync();
 
             string success = string.Format("User {0} created successfully.", user.UserName);
@@ -303,6 +345,11 @@ namespace iS3.MiniServer
 
         [HttpPost]
         [Route("RemoveUser")]
+        [Authorize(Roles = "Admin")]
+        // Remove a new user according to:
+        //      UserName
+        // Note: This operation cannot be recovered.
+        //
         public async Task<IHttpActionResult> RemoveUser(iS3User user)
         {
             if (user == null)
@@ -316,6 +363,12 @@ namespace iS3.MiniServer
                 return BadRequest("User does not exists");
             }
 
+            var userName = RequestContext.Principal.Identity.GetUserName();
+            if (string.Compare(user.UserName, userName, true) == 0)
+            {
+                return BadRequest("Cannot remove self");
+            }
+
             dbContext.Users.Remove(result);
             await dbContext.SaveChangesAsync();
 
@@ -323,5 +376,40 @@ namespace iS3.MiniServer
             return Ok(success);
         }
 
+        [HttpPost]
+        [Route("ChangePassword")]
+        // Change password of current user, the following three passwords should be provided.
+        //      OldPassword, Password, ConfirmPassword
+        // Note: This operation cannot be recovered.
+        //
+        public async Task<IHttpActionResult> ChangePassword(iS3User user)
+        {
+            if (user == null)
+            {
+                return BadRequest("Argument Null");
+            }
+            if (user.OldPassword == null || user.OldPassword.Length == 0)
+            {
+                return BadRequest("Old password could not be empty");
+            }
+            if (user.Password != user.ConfirmPassword)
+            {
+                return BadRequest("Password not consistent");
+            }
+
+            var userName = RequestContext.Principal.Identity.GetUserName();
+            var userExists = await dbContext.Users.FirstAsync(c => c.UserName == userName);
+            var userID = userExists.Id;
+
+            var manager = Request.GetOwinContext().GetUserManager<iS3UserManager>();
+            var result = await manager.ChangePasswordAsync(userID, user.OldPassword, user.Password);
+            if (!result.Succeeded)
+            {
+                return BadRequest(result.Errors.FirstOrDefault());
+            }
+
+            await dbContext.SaveChangesAsync();
+            return Ok("Password changed");
+        }
     }
 }
