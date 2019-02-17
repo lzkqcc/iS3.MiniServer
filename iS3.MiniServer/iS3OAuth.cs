@@ -56,17 +56,21 @@ namespace iS3.MiniServer
 {
     public static class iS3ClaimTypes
     {
-        public const string AuthorizedProjects = "iS3AuthorizedProjects";
-
+        public const string RolesInDomain = "iS3RolesInDomain";
+        public const string RolesInProject = "iS3RolesInProject";
     }
 
-    // iS3User class is for user authentication such as register and login.
-    // iS3User class inherits from Microsoft.AspNet.IdentityUser.
-    // 
-    public class iS3User : IdentityUser
+    public static class iS3ServerConfig
     {
-        public iS3User() : base() {  }
+        public const string DefaultDatabase = "iS3Db";
+    }
 
+    // iS3LoginUser class is only for login purposes.
+    // The password is never stored explicitly, and can never be visited
+    //   other than login process.
+    // 
+    public class iS3LoginUser
+    {
         // Password and Role is for admin to register new user remotely.
         // For example, we can register a new user
         //   UserName=john, Password=johnsPassword, ConfirmPassword=johnsPassword, Role=User
@@ -89,31 +93,57 @@ namespace iS3.MiniServer
         //        http://$ip:$port/Token
         //
 
+        // account information
+        public string UserName { get; set; }
         public string Password { get; set; }
         public string ConfirmPassword { get; set; }
         public string OldPassword { get; set; }
+        
+        // Role: admin, user
         public string Role { get; set; }
 
-        // projects that the user can visit
-        public string AuthorizedProjects { get; set; }
+        // Roles that a user claims (or is claimed) in a domain.
+        // It should be filled with json format, such as:
+        //   [
+        //     {"DomainName":"domain1", "RolesInDomain","read;write;edit;delete"},
+        //     {"DomainName":"domain2", "RolesInDomain","read"}
+        //   ]
+        //
+        public string ClaimedRolesInDomains { get; set; }
+
+        // Roles that a user claims (or is claimed) in a project.
+        // It should be filled with json format, such as:
+        //   [
+        //     {"ProjectName":"project1", "RolesInProject","read;write;edit;delete"},
+        //     {"ProjectName":"project2", "RolesInProject","read"}
+        //   ]
+        //
+        public string ClaimedRolesInProjects { get; set; }
     }
 
+    // iS3IdentityUser class is for user authentication.
+    // iS3IdentityUser class inherits from Microsoft.AspNet.IdentityUser.
+    // 
+    public class iS3IdentityUser : IdentityUser
+    {
+        public iS3IdentityUser() : base() { }
+        public iS3IdentityUser(string userName) : base(userName) {}
+    }
 
     // iS3UserManager class is for user management.
     // iS3UserManager class inherits from Microsoft.AspNet.UserManager.
     // 
-    public class iS3UserManager : UserManager<iS3User>
+    public class iS3UserManager : UserManager<iS3IdentityUser>
     {
-        public iS3UserManager(IUserStore<iS3User> store)
+        public iS3UserManager(IUserStore<iS3IdentityUser> store)
             : base(store) { }
-
 
         public static iS3UserManager Create(
             IdentityFactoryOptions<iS3UserManager> options,
             IOwinContext context)
         {
             return new iS3UserManager(
-                new UserStore<iS3User>(
+                new UserStore<iS3IdentityUser>(
                     context.Get<iS3OAuthDbContext>()));
         }
     }
@@ -162,15 +192,16 @@ namespace iS3.MiniServer
     // iS3OAuthDbContext class is for authentication database management.
     // iS3OAuthDbContext class inherits from Microsoft.AspNet.Identity.EntityFramework.
     // Note:
-    //   A default database "iS3Database" will be created using default EntityFramework
-    //     database service provider - SqlCeProviderServices (SqlServerCe).
+    //   A default database (iS3ServerConfig.DefaultDatabase) will be created using
+    //     default EntityFramework database service provider 
+    //     - SqlCeProviderServices (SqlServerCe).
     // 
-    public class iS3OAuthDbContext : IdentityDbContext<iS3User>
+    public class iS3OAuthDbContext : IdentityDbContext<iS3IdentityUser>
     {
         // The default database is specified here.
         //
         public iS3OAuthDbContext()
-            : base("iS3Database") { }
+            : base(iS3ServerConfig.DefaultDatabase) { }
 
         // Set database initializer, which will seed default Admin user.
         //
@@ -202,8 +233,8 @@ namespace iS3.MiniServer
     //     Therefore, avoid use DropCreateDatabaseAlways as base class.
     // 
     public class iS3OAuthDbInitializer
-    : DropCreateDatabaseIfModelChanges<iS3OAuthDbContext>
-    //: DropCreateDatabaseAlways<iS3OAuthDbContext>
+    //: DropCreateDatabaseIfModelChanges<iS3OAuthDbContext>
+    : DropCreateDatabaseAlways<iS3OAuthDbContext>
     {
         // Seed a default user: Admin
         //   Username=Admin, Password=iS3Admin, Role=Admin
@@ -213,14 +244,11 @@ namespace iS3.MiniServer
         protected async override void Seed(iS3OAuthDbContext context)
         {
             // Set up initial user: admin
-            var admin = new iS3User
-            {
-                UserName = "Admin"
-            };
+            var admin = new iS3IdentityUser("Admin");
 
             // Introducing...the UserManager:
             var manager = new iS3UserManager(
-                new UserStore<iS3User>(context));
+                new UserStore<iS3IdentityUser>(context));
 
             var result = await manager.CreateAsync(admin, "iS3Admin");
 
@@ -290,23 +318,23 @@ namespace iS3.MiniServer
         // Add a new user according to:
         //      UserName, Password, Role
         //
-        public async Task<IHttpActionResult> AddUser(iS3User user)
+        public async Task<IHttpActionResult> AddUser(iS3LoginUser loginUser)
         {
-            if (user == null)
+            if (loginUser == null)
             {
                 return BadRequest("Argument Null");
             }
-            if (user.Password != user.ConfirmPassword)
+            if (loginUser.Password != loginUser.ConfirmPassword)
             {
                 return BadRequest("Password not consistent");
             }
 
-            string password = user.Password;
+            string password = loginUser.Password;
             // Erase the password for safety.
-            user.Password = null;
-            user.ConfirmPassword = null;
+            loginUser.Password = null;
+            loginUser.ConfirmPassword = null;
 
-            var userExists = await dbContext.Users.AnyAsync(c => c.UserName == user.UserName);
+            var userExists = await dbContext.Users.AnyAsync(c => c.UserName == loginUser.UserName);
 
             if (userExists)
             {
@@ -314,8 +342,9 @@ namespace iS3.MiniServer
                 return BadRequest("User already exists");
             }
 
-            var manager = new iS3UserManager(
-                new UserStore<iS3User>(dbContext));
+            var manager = new iS3UserManager(new UserStore<iS3IdentityUser>(dbContext));
+
+            var user = new iS3IdentityUser(loginUser.UserName);
 
             var result = await manager.CreateAsync(user, password);
             if (!result.Succeeded)
@@ -324,21 +353,21 @@ namespace iS3.MiniServer
             }
 
             await manager.AddClaimAsync(user.Id,
-                new Claim(ClaimTypes.Name, user.UserName));
+                new Claim(ClaimTypes.Name, loginUser.UserName));
 
             await manager.AddClaimAsync(user.Id,
-                new Claim(ClaimTypes.Role, user.Role));
+                new Claim(ClaimTypes.Role, loginUser.Role));
 
             // add a claim to Identity.Claims
             //   Claim.Type = iS3ClaimTypes.AuthorizedProjects,
             //   Claim.Value = user.AuthorizedProjects
             //
-            await manager.AddClaimAsync(user.Id,
-                new Claim(iS3ClaimTypes.AuthorizedProjects, user.AuthorizedProjects));
+            //await manager.AddClaimAsync(user.Id,
+            //    new Claim(iS3ClaimTypes.AuthorizedProjects, loginUser.AuthorizedProjects));
 
             await dbContext.SaveChangesAsync();
 
-            string success = string.Format("User {0} created successfully.", user.UserName);
+            string success = string.Format("User {0} created successfully.", loginUser.UserName);
 
             return Ok(success);
         }
@@ -350,29 +379,29 @@ namespace iS3.MiniServer
         //      UserName
         // Note: This operation cannot be recovered.
         //
-        public async Task<IHttpActionResult> RemoveUser(iS3User user)
+        public async Task<IHttpActionResult> RemoveUser(iS3LoginUser loginUser)
         {
-            if (user == null)
+            if (loginUser == null)
             {
                 return BadRequest("Argument Null");
             }
-            var result = await dbContext.Users.FirstOrDefaultAsync(c => c.UserName == user.UserName);
+            var user = await dbContext.Users.FirstOrDefaultAsync(c => c.UserName == loginUser.UserName);
 
-            if (result == null)
+            if (user == null)
             {
                 return BadRequest("User does not exists");
             }
 
             var userName = RequestContext.Principal.Identity.GetUserName();
-            if (string.Compare(user.UserName, userName, true) == 0)
+            if (string.Compare(loginUser.UserName, userName, true) == 0)
             {
                 return BadRequest("Cannot remove self");
             }
 
-            dbContext.Users.Remove(result);
+            dbContext.Users.Remove(user);
             await dbContext.SaveChangesAsync();
 
-            string success = string.Format("User {0} removed successfully.", user.UserName);
+            string success = string.Format("User {0} removed successfully.", loginUser.UserName);
             return Ok(success);
         }
 
@@ -382,27 +411,27 @@ namespace iS3.MiniServer
         //      OldPassword, Password, ConfirmPassword
         // Note: This operation cannot be recovered.
         //
-        public async Task<IHttpActionResult> ChangePassword(iS3User user)
+        public async Task<IHttpActionResult> ChangePassword(iS3LoginUser loginUser)
         {
-            if (user == null)
+            if (loginUser == null)
             {
                 return BadRequest("Argument Null");
             }
-            if (user.OldPassword == null || user.OldPassword.Length == 0)
+            if (loginUser.OldPassword == null || loginUser.OldPassword.Length == 0)
             {
                 return BadRequest("Old password could not be empty");
             }
-            if (user.Password != user.ConfirmPassword)
+            if (loginUser.Password != loginUser.ConfirmPassword)
             {
                 return BadRequest("Password not consistent");
             }
 
             var userName = RequestContext.Principal.Identity.GetUserName();
-            var userExists = await dbContext.Users.FirstAsync(c => c.UserName == userName);
-            var userID = userExists.Id;
+            var user = await dbContext.Users.FirstAsync(c => c.UserName == userName);
+            var userID = user.Id;
 
             var manager = Request.GetOwinContext().GetUserManager<iS3UserManager>();
-            var result = await manager.ChangePasswordAsync(userID, user.OldPassword, user.Password);
+            var result = await manager.ChangePasswordAsync(userID, loginUser.OldPassword, loginUser.Password);
             if (!result.Succeeded)
             {
                 return BadRequest(result.Errors.FirstOrDefault());
@@ -410,6 +439,40 @@ namespace iS3.MiniServer
 
             await dbContext.SaveChangesAsync();
             return Ok("Password changed");
+        }
+
+        [HttpPost]
+        [Route("SetRolesInArea")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IHttpActionResult> SetRolesInArea(iS3RolesInArea rolesInArea)
+        {
+            if (rolesInArea == null)
+            {
+                return BadRequest("Argument Null");
+            }
+            var user = await dbContext.Users.FirstOrDefaultAsync(c => c.UserName == rolesInArea.UserName);
+
+            if (user == null)
+            {
+                return BadRequest("User does not exists");
+            }
+
+            var manager = new iS3UserManager(new UserStore<iS3IdentityUser>(dbContext));
+            var claims = await manager.GetClaimsAsync(user.Id);
+            bool exist = claims.Any(c => c.Type == rolesInArea.AreaName);
+
+            Claim claim = null;
+            IdentityResult result = null;
+            if (exist)
+            {
+                claim = claims.FirstOrDefault(c => c.Type == rolesInArea.AreaName);
+                result = await manager.RemoveClaimAsync(user.Id, claim);
+            }
+            claim = new Claim(rolesInArea.AreaName, rolesInArea.Roles);
+            result = await manager.AddClaimAsync(user.Id, claim);
+
+            await dbContext.SaveChangesAsync();
+            return Ok("Roles in domain set");
         }
     }
 }
