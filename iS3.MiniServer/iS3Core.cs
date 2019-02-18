@@ -11,6 +11,7 @@ namespace iS3.MiniServer
 {
     public static class MiniServer
     {
+        public const string DefaultDatabase = "iS3Db";
         public static ICollection<string> GetSubClasses<T>()
         {
             IEnumerable<Type> subclasses =
@@ -26,7 +27,9 @@ namespace iS3.MiniServer
         }
     }
 
-    public abstract class iS3Area
+    // iS3AreaDesc: iS3Area Description
+    // 
+    public class iS3AreaDesc
     {
         // ID of the object
         public string ID { get; set; }
@@ -40,7 +43,96 @@ namespace iS3.MiniServer
 
         // Parent area ID
         public string ParentID { get; set; }
+
+        // Database name
+        public string DbName { get; set; }
     }
+
+    // iS3DomainDesc: iS3Domain Description
+    //
+    public class iS3DomainDesc : iS3AreaDesc
+    {
+        //[Key]
+        ////public int iS3DomainID { get; set; }
+
+        public iS3DomainDesc()
+        {
+            Type = GetType().ToString();
+        }
+    }
+
+    // iS3ProjectDesc: iS3Project Description
+    //
+    public class iS3ProjectDesc : iS3AreaDesc
+    {
+        //[Key]
+        //public int iS3ProjectID { get; set; }
+
+        public iS3ProjectDesc()
+        {
+            Type = GetType().ToString();
+        }
+    }
+
+    // iS3TerritoryDesc: iS3Territory Description
+    //
+    public class iS3TerritoryDesc : iS3AreaDesc
+    {
+        //[Key]
+        //public int iS3TerritoryID { get; set; }
+
+        public ICollection<iS3DomainDesc> DomainDescs { get; set; }
+        public ICollection<iS3ProjectDesc> ProjectDescs { get; set; }
+
+        public iS3TerritoryDesc()
+        {
+            Type = GetType().ToString();
+            DomainDescs = new List<iS3DomainDesc>();
+            ProjectDescs = new List<iS3ProjectDesc>();
+        }
+
+        public iS3DomainDesc GetDomainDesc(string NameOrID)
+        {
+            iS3DomainDesc result = null;
+            bool exist = DomainDescs.Any(c => c.ID == NameOrID);
+            if (exist)
+            {
+                result = DomainDescs.First(c => c.ID == NameOrID);
+            }
+            else
+            {
+                exist = DomainDescs.Any(c => c.Name == NameOrID);
+                if (exist)
+                {
+                    result = DomainDescs.First(c => c.Name == NameOrID);
+                }
+            }
+            return result;
+        }
+    }
+
+    public class iS3Area
+    {
+        public iS3AreaDesc Desc { get; set; }
+        public iS3Area (iS3AreaDesc desc)
+        {
+            Desc = desc;
+        }
+    }
+
+    public class iS3Domain : iS3Area
+    {
+        public iS3Domain(iS3AreaDesc desc) : base(desc)
+        {
+
+        }
+    }
+
+    public class iS3Project : iS3Area
+    {
+        public iS3Project(iS3AreaDesc desc) : base(desc) { }
+    }
+
 
     public class iS3RolesInArea
     {
@@ -49,69 +141,10 @@ namespace iS3.MiniServer
         public string Roles { get; set; }
     }
 
-    public class iS3Territory : iS3Area
-    {
-        //[Key]
-        //public int iS3TerritoryID { get; set; }
-
-        public ICollection<iS3Domain> Domains { get; set; }
-        public ICollection<iS3Project> Projects { get; set; }
-
-        public iS3Territory()
-        {
-            Type = GetType().ToString();
-            Domains = new List<iS3Domain>();
-            Projects = new List<iS3Project>();
-        }
-
-        public iS3Domain GetDomain(string NameOrID)
-        {
-            iS3Domain result = null;
-            bool exist = Domains.Any(c => c.ID == NameOrID);
-            if (exist)
-            {
-                result = Domains.First(c => c.ID == NameOrID);
-            }
-            else
-            {
-                exist = Domains.Any(c => c.Name == NameOrID);
-                if (exist)
-                {
-                    result = Domains.First(c => c.Name == NameOrID);
-                }
-            }
-            return result;
-        }
-    }
-
-    public class iS3Domain : iS3Area
-    {
-        //[Key]
-        ////public int iS3DomainID { get; set; }
-
-        public iS3Domain()
-        {
-            Type = GetType().ToString();
-        }
-    }
-
-    public class iS3DomainGeology : iS3Domain { }
-
-    public class iS3Project : iS3Area
-    {
-        //[Key]
-        //public int iS3ProjectID { get; set; }
-
-        public iS3Project()
-        {
-            Type = GetType().ToString();
-        }
-    }
-
     public class iS3DbContext : DbContext
     {
         public iS3DbContext() :
-            base(iS3ServerConfig.DefaultDatabase)
+            base(MiniServer.DefaultDatabase)
         {
             //Database.SetInitializer<iS3DbContext>(new CreateDatabaseIfNotExists<iS3DbContext>());
             //Database.SetInitializer<iS3DbContext>(new DropCreateDatabaseIfModelChanges<iS3DbContext>());
@@ -119,7 +152,7 @@ namespace iS3.MiniServer
         }
 
         //public DbSet<iS3Domain> Domains { get; set; }
-        public DbSet<iS3Territory> Territories { get; set; }
+        public DbSet<iS3TerritoryDesc> TerritoryDescs { get; set; }
     }
 
     
@@ -127,174 +160,12 @@ namespace iS3.MiniServer
     [Authorize(Roles = "Admin")]
     public class TerritoriesController : ApiController
     {
-        // Get territory by NameOrID.
-        // Note: If not found, it will try to return the territory which is the default,
-        //     i.e., Default==true
-        //
-        internal async Task<iS3Territory> getTerritory(string NameOrID, iS3DbContext ctx)
-        {
-            iS3Territory result = null;
-            bool exist = await ctx.Territories.AnyAsync(c => c.ID == NameOrID);
-            if (exist)
-            {
-                result = await ctx.Territories.FirstAsync(c => c.ID == NameOrID);
-                return result;
-            }
-            exist = await ctx.Territories.AnyAsync(c => c.Name == NameOrID);
-            if (exist)
-            {
-                result = await ctx.Territories.FirstAsync(c => c.Name == NameOrID);
-                return result;
-            }
-            exist = await ctx.Territories.AnyAsync(c => c.Default == true);
-            if (exist)
-            {
-                result = await ctx.Territories.FirstAsync(c => c.Default == true);
-                return result;
-            }
-            return null;
-        }
-
         [HttpGet]
-        [Route("GetAllTerritories")]
-        public async Task<IHttpActionResult> GetAllTerritories()
+        [Route("SupportedTerritories")]
+        public ICollection<string> SupportedTerritories()
         {
-            using (var ctx = new iS3DbContext())
-            {
-                ICollection<iS3Territory> result = await ctx.Territories.ToListAsync();
-                return Ok(result);
-            }
-        }
-
-        [HttpGet]
-        [Route("GetTerritory")]
-        public async Task<IHttpActionResult> GetTerritory(string NameOrID)
-        {
-            if (NameOrID == null)
-            {
-                return BadRequest("Argument Null");
-            }
-
-            iS3Territory result = null;
-            using (var ctx = new iS3DbContext())
-            {
-                result = await getTerritory(NameOrID, ctx);
-                return Ok(result);
-            }
-        }
-
-        [HttpPost]
-        [Route("AddTerritory")]
-        public async Task<IHttpActionResult> AddTerritory(iS3Territory territory)
-        {
-            if (territory == null)
-            {
-                return BadRequest("Argument Null");
-            }
-
-            using (var ctx = new iS3DbContext())
-            {
-                bool exists = await ctx.Territories.AnyAsync(c => c.Name == territory.Name);
-                if (exists)
-                {
-                    return BadRequest("Already exists");
-                }
-
-                iS3Territory newTerritory = new iS3Territory();
-                newTerritory.Name = territory.Name;
-                newTerritory.ID = Guid.NewGuid().ToString();
-
-                var result = ctx.Territories.Add(newTerritory);
-                await ctx.SaveChangesAsync();
-
-                return Ok(newTerritory);
-            }
-        }
-
-        [HttpPost]
-        [Route("AddDomain")]
-        public async Task<IHttpActionResult> AddDomain(iS3Domain domain)
-        {
-            if (domain == null)
-            {
-                return BadRequest("Argument Null");
-            }
-
-            iS3Territory territory = null;
-            iS3Domain newDomain = null;
-            using (var ctx = new iS3DbContext())
-            {
-                territory = await getTerritory(domain.ParentID, ctx);
-                if (territory == null)
-                {
-                    return BadRequest("Territory null and no default");
-                }
-
-                bool exist = territory.Domains.Any(c => c.Name == domain.Name);
-                if (exist)
-                {
-                    return BadRequest("Domain exist");
-                }
-
-                newDomain = new iS3Domain();
-                newDomain.Name = domain.Name;
-                newDomain.ID = Guid.NewGuid().ToString();
-                newDomain.ParentID = territory.ID;
-
-                territory.Domains.Add(newDomain);
-                await ctx.SaveChangesAsync();
-            }
-
-            // Check the domains can be loaded into the territory
-            //
-            //using (var ctx = new iS3DbContext())
-            //{
-            //    territory = await getTerritory(domain.ParentID, ctx);
-
-            //    var entry = ctx.Entry(territory).Collection(t => t.Domains);
-            //    var isLoaded = entry.IsLoaded;
-            //    await entry.LoadAsync();
-            //    isLoaded = entry.IsLoaded;
-
-            //    var domains = territory.Domains;
-            //}
-
-            return Ok(newDomain);
-        }
-
-
-        [HttpPost]
-        [Route("GetDomain")]
-        public async Task<IHttpActionResult> GetDomain(iS3Domain domain)
-        {
-            if (domain == null)
-            {
-                return BadRequest("Argument Null");
-            }
-
-            iS3Territory territory = null;
-            iS3Domain result = null;
-            using (var ctx = new iS3DbContext())
-            {
-                territory = await getTerritory(domain.ParentID, ctx);
-                if (territory == null)
-                {
-                    return BadRequest("Territory null and no default");
-                }
-
-                // explicit load domains
-                //
-                var entry = ctx.Entry(territory).Collection(t => t.Domains);
-                var isLoaded = entry.IsLoaded;
-                await entry.LoadAsync();
-                isLoaded = entry.IsLoaded;
-
-                result = territory.GetDomain(domain.ID);
-                if (result == null)
-                    result = territory.GetDomain(domain.Name);
-            }
-
-            return Ok(result);
+            ICollection<string> result = MiniServer.GetSubClasses<iS3Territory>();
+            return result;
         }
 
         [HttpGet]
@@ -313,6 +184,200 @@ namespace iS3.MiniServer
             return result;
         }
 
+        // Get territory by NameOrID.
+        // Note: If not found, it will try to return the territory which is the default,
+        //     i.e., Default==true
+        //
+        public static async Task<iS3TerritoryDesc> getTerritoryDesc(string NameOrID,
+            iS3DbContext ctx)
+        {
+            if (ctx == null)
+            {
+                using (var ctx_new = new iS3DbContext())
+                {
+                    return await getTerritoryDescInternal(NameOrID, ctx_new);
+                }
+            }
+            else
+            {
+                return await getTerritoryDescInternal(NameOrID, ctx);
+            }
+        }
+
+        static async Task<iS3TerritoryDesc> getTerritoryDescInternal(string NameOrID, iS3DbContext ctx)
+        {
+            iS3TerritoryDesc result = null;
+            bool exist = await ctx.TerritoryDescs.AnyAsync(c => c.ID == NameOrID);
+            if (exist)
+            {
+                result = await ctx.TerritoryDescs.FirstAsync(c => c.ID == NameOrID);
+                return result;
+            }
+            exist = await ctx.TerritoryDescs.AnyAsync(c => c.Name == NameOrID);
+            if (exist)
+            {
+                result = await ctx.TerritoryDescs.FirstAsync(c => c.Name == NameOrID);
+                return result;
+            }
+            exist = await ctx.TerritoryDescs.AnyAsync(c => c.Default == true);
+            if (exist)
+            {
+                result = await ctx.TerritoryDescs.FirstAsync(c => c.Default == true);
+                return result;
+            }
+            return null;
+        }
+
+        [HttpPost]
+        [Route("AddTerritory")]
+        public async Task<IHttpActionResult> AddTerritory(iS3TerritoryDesc territoryDesc)
+        {
+            if (territoryDesc == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            using (var ctx = new iS3DbContext())
+            {
+                bool exists = await ctx.TerritoryDescs.AnyAsync(c => c.Name == territoryDesc.Name);
+                if (exists)
+                {
+                    return BadRequest("Already exists");
+                }
+
+                iS3TerritoryDesc newTerritoryDesc = new iS3TerritoryDesc();
+                newTerritoryDesc.ID = Guid.NewGuid().ToString();
+                newTerritoryDesc.Name = territoryDesc.Name;
+                newTerritoryDesc.DbName = territoryDesc.DbName;
+
+                var result = ctx.TerritoryDescs.Add(newTerritoryDesc);
+                await ctx.SaveChangesAsync();
+
+                return Ok(newTerritoryDesc);
+            }
+        }
+
+        [HttpGet]
+        [Route("GetTerritoryDesc")]
+        public async Task<IHttpActionResult> GetTerritoryDesc(string NameOrID)
+        {
+            if (NameOrID == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            iS3TerritoryDesc result = null;
+            using (var ctx = new iS3DbContext())
+            {
+                result = await getTerritoryDesc(NameOrID, ctx);
+                return Ok(result);
+            }
+        }
+
+        [HttpGet]
+        [Route("GetAllTerritoryDescs")]
+        public async Task<IHttpActionResult> GetAllTerritoryDescs()
+        {
+            using (var ctx = new iS3DbContext())
+            {
+                ICollection<iS3TerritoryDesc> result = await ctx.TerritoryDescs.ToListAsync();
+                return Ok(result);
+            }
+        }
+
+        [HttpPost]
+        [Route("AddDomain")]
+        public async Task<IHttpActionResult> AddDomain(iS3DomainDesc domainDesc)
+        {
+            if (domainDesc == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            iS3TerritoryDesc territoryDesc = null;
+            iS3DomainDesc newDomainDesc = null;
+
+            using (var ctx = new iS3DbContext())
+            {
+                territoryDesc = await getTerritoryDesc(domainDesc.ParentID, ctx);
+                if (territoryDesc == null)
+                {
+                    return BadRequest("Territory null and no default");
+                }
+
+                bool exist = territoryDesc.DomainDescs.Any(c => c.Name == domainDesc.Name);
+                if (exist)
+                {
+                    return BadRequest("Domain exist");
+                }
+
+                newDomainDesc = new iS3DomainDesc();
+                newDomainDesc.ID = Guid.NewGuid().ToString();
+                newDomainDesc.ParentID = territoryDesc.ID;
+                newDomainDesc.Name = domainDesc.Name;
+
+                if (domainDesc.DbName != null)
+                    newDomainDesc.DbName = domainDesc.DbName;
+                else if (territoryDesc.DbName != null)
+                    newDomainDesc.DbName = territoryDesc.DbName;
+                else
+                    newDomainDesc.DbName = MiniServer.DefaultDatabase;
+
+                territoryDesc.DomainDescs.Add(newDomainDesc);
+                await ctx.SaveChangesAsync();
+            }
+
+            // Check the domains can be loaded into the territory
+            //
+            //using (var ctx = new iS3DbContext())
+            //{
+            //    territory = await getTerritory(domain.ParentID, ctx);
+
+            //    var entry = ctx.Entry(territory).Collection(t => t.Domains);
+            //    var isLoaded = entry.IsLoaded;
+            //    await entry.LoadAsync();
+            //    isLoaded = entry.IsLoaded;
+
+            //    var domains = territory.Domains;
+            //}
+
+            return Ok(newDomainDesc);
+        }
+
+
+        [HttpPost]
+        [Route("GetDomainDesc")]
+        public async Task<IHttpActionResult> GetDomainDesc(iS3DomainDesc domain)
+        {
+            if (domain == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            iS3TerritoryDesc territory = null;
+            iS3DomainDesc result = null;
+            using (var ctx = new iS3DbContext())
+            {
+                territory = await getTerritoryDesc(domain.ParentID, ctx);
+                if (territory == null)
+                {
+                    return BadRequest("Territory null and no default");
+                }
+
+                // explicit load domains
+                //
+                var entry = ctx.Entry(territory).Collection(t => t.DomainDescs);
+                var isLoaded = entry.IsLoaded;
+                await entry.LoadAsync();
+                isLoaded = entry.IsLoaded;
+
+                result = territory.GetDomainDesc(domain.ID);
+                if (result == null)
+                    result = territory.GetDomainDesc(domain.Name);
+            }
+
+            return Ok(result);
+        }
     }
 
 }

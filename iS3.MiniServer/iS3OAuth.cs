@@ -60,11 +60,6 @@ namespace iS3.MiniServer
         public const string RolesInProject = "iS3RolesInProject";
     }
 
-    public static class iS3ServerConfig
-    {
-        public const string DefaultDatabase = "iS3Db";
-    }
-
     // iS3LoginUser class is only for login purposes.
     // The password is never stored explicitly, and can never be visited
     //   other than login process.
@@ -192,7 +187,7 @@ namespace iS3.MiniServer
     // iS3OAuthDbContext class is for authentication database management.
     // iS3OAuthDbContext class inherits from Microsoft.AspNet.Identity.EntityFramework.
     // Note:
-    //   A default database (iS3ServerConfig.DefaultDatabase) will be created using
+    //   A default database (MiniServer.DefaultDatabase) will be created using
     //     default EntityFramework database service provider 
     //     - SqlCeProviderServices (SqlServerCe).
     // 
@@ -201,7 +196,7 @@ namespace iS3.MiniServer
         // The default database is specified here.
         //
         public iS3OAuthDbContext()
-            : base(iS3ServerConfig.DefaultDatabase) { }
+            : base(MiniServer.DefaultDatabase) { }
 
         // Set database initializer, which will seed default Admin user.
         //
