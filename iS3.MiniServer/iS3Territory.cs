@@ -8,9 +8,17 @@ using System.Web.Http;
 
 namespace iS3.MiniServer
 {
-    public class iS3Territory : iS3Area
+    public class iS3SimpleTerritory : iS3Territory
     {
-        public iS3Territory(iS3AreaDesc desc) : base(desc) { }
+        public iS3SimpleTerritory(iS3TerritoryDesc desc) : base(desc)
+        { }
+
+        public static async Task AddDomain(iS3DomainDesc domainDesc)
+        {
+            await MiniServer.AddDomainDesc(domainDesc.Name, domainDesc.Type, 
+                domainDesc.ParentID, domainDesc.DbName);
+        }
+
     }
 
     public class iS3TerritoryDbContext : DbContext
@@ -18,30 +26,115 @@ namespace iS3.MiniServer
         public iS3TerritoryDbContext(string dbName) :
             base(dbName)
         {
-            //Database.SetInitializer<iS3DbContext>(new CreateDatabaseIfNotExists<iS3DbContext>());
-            //Database.SetInitializer<iS3DbContext>(new DropCreateDatabaseIfModelChanges<iS3DbContext>());
-            Database.SetInitializer<iS3DbContext>(new DropCreateDatabaseAlways<iS3DbContext>());
+            //Database.SetInitializer<iS3TerritoryDbContext>(new CreateDatabaseIfNotExists<iS3TerritoryDbContext>());
+            //Database.SetInitializer<iS3TerritoryDbContext>(new DropCreateDatabaseIfModelChanges<iS3TerritoryDbContext>());
+            Database.SetInitializer<iS3TerritoryDbContext>(new DropCreateDatabaseAlways<iS3TerritoryDbContext>());
         }
 
     }
 
-    [RoutePrefix("api/Territory")]
+    [RoutePrefix("api/Territories")]
     [Authorize(Roles = "Admin")]
-    public class TerritoryController : ApiController
+    public class TerritoriesController : ApiController
     {
         [HttpGet]
-        [Route("TerritoryAPI")]
-        public async Task<IHttpActionResult> TerritoryAPI(string tID)
+        [Route("SupportedTerritories")]
+        public ICollection<string> SupportedTerritories()
         {
-            iS3TerritoryDesc tDesc = await TerritoriesController.getTerritoryDesc(tID, null);
+            ICollection<string> result = MiniServer.GetSubClasses<iS3Territory>();
+            return result;
+        }
 
-            using (var ctx = new iS3TerritoryDbContext(tDesc.DbName))
+        [HttpGet]
+        [Route("SupportedDomains")]
+        public ICollection<string> SupportedDomains()
+        {
+            ICollection<string> result = MiniServer.GetSubClasses<iS3Domain>();
+            return result;
+        }
+
+        [HttpGet]
+        [Route("SupportedProjects")]
+        public ICollection<string> SupportedProjects()
+        {
+            ICollection<string> result = MiniServer.GetSubClasses<iS3Project>();
+            return result;
+        }
+
+        [HttpGet]
+        [Route("GetAllTerritoryDescs")]
+        public async Task<IHttpActionResult> GetAllTerritoryDescs()
+        {
+            ICollection<iS3TerritoryDesc> result = null;
+            result = await MiniServer.GetAllTerritoryDescs();
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("GetTerritoryDesc")]
+        public async Task<IHttpActionResult> GetTerritoryDesc(string NameOrID)
+        {
+            if (NameOrID == null)
             {
-
+                return BadRequest("Argument Null");
             }
 
-            return Ok("TerritoryAPI");
+            iS3TerritoryDesc result = null;
+            result = await MiniServer.getTerritoryDesc(NameOrID);
+            return Ok(result);
         }
+
+
+        [HttpPost]
+        [Route("AddTerritory")]
+        public async Task<IHttpActionResult> AddTerritory(iS3TerritoryDesc desc)
+        {
+            if (desc == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            iS3TerritoryDesc newDesc = 
+                await MiniServer.AddTerritoryDesc(desc.Name, desc.Type, desc.DbName);
+
+            return Ok(newDesc);
+        }
+
+
+        //[HttpPost]
+        //[Route("GetDomainDesc")]
+        //public async Task<IHttpActionResult> GetDomainDesc1(iS3DomainDesc domain)
+        //{
+        //    if (domain == null)
+        //    {
+        //        return BadRequest("Argument Null");
+        //    }
+
+        //    iS3TerritoryDesc territory = null;
+        //    iS3DomainDesc result = null;
+        //    using (var ctx = new iS3MainDbContext())
+        //    {
+        //        territory = await getTerritoryDesc(domain.ParentID, ctx);
+        //        if (territory == null)
+        //        {
+        //            return BadRequest("Territory null and no default");
+        //        }
+
+        //        // explicit load domains
+        //        //
+        //        var entry = ctx.Entry(territory).Collection(t => t.DomainDescs);
+        //        var isLoaded = entry.IsLoaded;
+        //        await entry.LoadAsync();
+        //        isLoaded = entry.IsLoaded;
+
+        //        result = territory.GetDomainDesc(domain.ID);
+        //        if (result == null)
+        //            result = territory.GetDomainDesc(domain.Name);
+        //    }
+
+        //    return Ok(result);
+        //}
     }
+
 
 }

@@ -10,7 +10,8 @@ namespace iS3.MiniServer
 {
     public class iS3Geology : iS3Domain
     {
-        public iS3Geology(iS3AreaDesc desc) : base(desc) { }
+        public iS3Geology(iS3DomainDesc desc) : base(desc)
+        { }
     }
 
     public class iS3GeologyDbContext : DbContext
@@ -20,7 +21,7 @@ namespace iS3.MiniServer
         {
             //Database.SetInitializer<iS3DbContext>(new CreateDatabaseIfNotExists<iS3DbContext>());
             //Database.SetInitializer<iS3DbContext>(new DropCreateDatabaseIfModelChanges<iS3DbContext>());
-            Database.SetInitializer<iS3DbContext>(new DropCreateDatabaseAlways<iS3DbContext>());
+            Database.SetInitializer<iS3MainDbContext>(new DropCreateDatabaseAlways<iS3MainDbContext>());
         }
 
         public DbSet<iS3TerritoryDesc> Territories { get; set; }
