@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Data.Entity;
 using System.Web.Http;
 using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 
 namespace iS3.MiniServer
 {
@@ -120,9 +121,16 @@ namespace iS3.MiniServer
     public class iS3Territory : iS3Area
     {
         public iS3TerritoryDesc TerritoryDesc { get; set; }
+
+        public ICollection<iS3Domain> Domains { get; set; }
+        public ICollection<iS3Project> Projects { get; set; }
+
         public iS3Territory(iS3TerritoryDesc desc) : base(desc)
         {
             TerritoryDesc = desc;
+
+            Domains = new List<iS3Domain>();
+            Projects = new List<iS3Project>();
         }
     }
 
@@ -175,6 +183,29 @@ namespace iS3.MiniServer
             return result;
         }
 
+        // Get the type of the specified class name
+        //
+        public static Type GetType(string className)
+        {
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            Type t = assembly.GetType(className);
+            if (t != null)
+            {
+                return t;
+            }
+
+            Assembly[] assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var x in assemblies)
+            {
+                t = x.GetType(className);
+                if (t != null)
+                {
+                    return t;
+                }
+            }
+            return null;
+        }
+
         // Get all territory descriptions.
         // In other words, get all territories that are hosted on the server.
         //
@@ -210,7 +241,8 @@ namespace iS3.MiniServer
             }
         }
 
-        static async Task<iS3TerritoryDesc> getTerritoryDescInternal(string nameOrID, iS3MainDbContext ctx)
+        static async Task<iS3TerritoryDesc> getTerritoryDescInternal(string nameOrID,
+            iS3MainDbContext ctx)
         {
             iS3TerritoryDesc result = null;
             bool exist = await ctx.TerritoryDescs.AnyAsync(c => c.ID == nameOrID);
@@ -239,7 +271,8 @@ namespace iS3.MiniServer
         //   if type is not give, i.e., null, default is iS3SimpleTerritory
         //   if dbName is not given, i.e., null, default database name will be used.
         //
-        public static async Task<iS3TerritoryDesc> AddTerritoryDesc(string name, string type = null, string dbName = null)
+        public static async Task<iS3TerritoryDesc> AddTerritoryDesc(string name,
+            string type = null, string dbName = null)
         {
             if (name == null)
             {
@@ -277,7 +310,8 @@ namespace iS3.MiniServer
         //   name, type, parentNameOrID  should be filled
         //   if dbName is not given, i.e., null, default database name will be used.
         //
-        public static async Task<iS3DomainDesc> AddDomainDesc(string name, string type, string parentNameOrID, string dbName = null)
+        public static async Task<iS3DomainDesc> AddDomainDesc(string name,
+            string type, string parentNameOrID, string dbName = null)
         {
             iS3TerritoryDesc territoryDesc = null;
 
@@ -377,7 +411,8 @@ namespace iS3.MiniServer
         //   NameOrID: should be filled
         //   ParentNameOrID: if not specified, the default Territory will be assumed
         //
-        public static async Task<iS3DomainDesc> GetDomainDesc(string nameOrID, string parentNameOrID)
+        public static async Task<iS3DomainDesc> GetDomainDesc(string nameOrID,
+            string parentNameOrID)
         {
             if (nameOrID == null)
             {
@@ -407,6 +442,47 @@ namespace iS3.MiniServer
             return result;
         }
 
+
+        // Global territories variable
+        //
+        public static Dictionary<string, iS3Territory>
+            Territories = new Dictionary<string, iS3Territory>();
+        public static void AddTerritory(iS3Territory territory)
+        {
+            string ID = territory.TerritoryDesc.ID;
+            Territories[ID] = territory;
+        }
+        public static iS3Territory GetTerritory(string ID)
+        {
+            return Territories[ID];
+        }
+
+        public static async Task AddTerritory(iS3TerritoryDesc territoryDesc)
+        {
+            iS3TerritoryDesc newDesc =
+                await MiniServer.AddTerritoryDesc(territoryDesc.Name, 
+                territoryDesc.Type, territoryDesc.DbName);
+
+            Type t = MiniServer.GetType(newDesc.Type);
+            iS3Territory territory = (iS3Territory)
+                Activator.CreateInstance(t, newDesc);
+
+            MiniServer.AddTerritory(territory);
+        }
+
+        public static async Task AddDomain(iS3DomainDesc domainDesc)
+        {
+            await MiniServer.AddDomainDesc(domainDesc.Name, domainDesc.Type,
+                domainDesc.ParentID, domainDesc.DbName);
+
+            iS3Territory territory = MiniServer.GetTerritory(domainDesc.ParentID);
+
+            Type t = MiniServer.GetType(domainDesc.Type);
+            iS3Domain domain = (iS3Domain)
+                Activator.CreateInstance(t, domainDesc);
+
+            territory.Domains.Add(domain);
+        }
     }
 
 

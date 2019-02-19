@@ -11,13 +11,9 @@ namespace iS3.MiniServer
     public class iS3SimpleTerritory : iS3Territory
     {
         public iS3SimpleTerritory(iS3TerritoryDesc desc) : base(desc)
-        { }
-
-        public static async Task AddDomain(iS3DomainDesc domainDesc)
         {
-            await MiniServer.AddDomainDesc(domainDesc.Name, domainDesc.Type, 
-                domainDesc.ParentID, domainDesc.DbName);
         }
+
 
     }
 
@@ -94,11 +90,25 @@ namespace iS3.MiniServer
                 return BadRequest("Argument Null");
             }
 
-            iS3TerritoryDesc newDesc = 
-                await MiniServer.AddTerritoryDesc(desc.Name, desc.Type, desc.DbName);
+            await MiniServer.AddTerritory(desc);
 
-            return Ok(newDesc);
+            return Ok();
         }
+
+        [HttpPost]
+        [Route("AddDomain")]
+        public async Task<IHttpActionResult> AddDomain(iS3DomainDesc desc)
+        {
+            if (desc == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            await MiniServer.AddDomain(desc);       
+
+            return Ok();
+        }
+
 
 
         //[HttpPost]
