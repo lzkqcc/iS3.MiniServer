@@ -6,15 +6,24 @@ using System.Threading.Tasks;
 using System.Data.Entity;
 using System.Web.Http;
 
+/*
+ * This file defines iS3 Territory WebAPI, which can be visited through
+ *   api/Territories/[api name]
+ *   
+ * The class defined are:
+ *   iS3SimpleTerritory: nothing but a simple territory
+ *   iS3TerritoryDbContext: database context
+ *   TerritoriesController: Territory WebAPI Controller
+ * 
+ */
+
 namespace iS3.MiniServer
 {
     public class iS3SimpleTerritory : iS3Territory
     {
-        public iS3SimpleTerritory(iS3TerritoryDesc desc) : base(desc)
+        public iS3SimpleTerritory(iS3TerritoryHandle handle) : base(handle)
         {
         }
-
-
     }
 
     public class iS3TerritoryDbContext : DbContext
@@ -29,6 +38,38 @@ namespace iS3.MiniServer
 
     }
 
+    /*
+     * TerritoriesController is a WebAPI class for managing territories.
+     * We provide the following WebAPIs：
+     *     api/Territories/SupportedTerritories
+     *     api/Territories/SupportedDomains
+     *     api/Territories/SupportedProjects
+     *     api/Territories/GetAllTerritoryHandles
+     *     api/Territories/GetTerritoryHandle
+     *     api/Territories/GetDomainHandle
+     *     api/Territories/AddTerritory
+     *     api/Territories/AddDomain
+     * As a test to the WebAPI, here are examples in ubuntu-linux shell:
+     * 
+port=8080
+curl -d 'grant_type=password&username=Admin&password=iS3Admin' http://localhost:$port/Token
+    [=>will return token for Admin]
+token1=$[token from above responses]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Territories/SupportedTerritories
+    [=>will return supported territory types]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Territories/SupportedDomains
+    [=>will return supported domain types]
+curl -H "Authorization:Bearer $token1" -d "Name=Shanghai&DbName=Shanghai&Type=iS3.MiniServer.iS3SimpleTerritory" http://localhost:$port/api/Territories/AddTerritory
+    [=>will return added territory handle]
+curl -H "Authorization:Bearer $token1" -d "Name=Geology&ParentID=Shanghai&Type=iS3.MiniServer.iS3Geology" http://localhost:$port/api/Territories/AddDomain
+    [=>will return added domain handle]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Territories/GetTerritoryHandle?nameOrID=Shanghai
+    [=>will return requested territory handle]
+curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Territories/GetDomainHandle?nameOrID=Geology\&parentNameOrID=Shanghai
+    [=>will return requested domain handle]
+     *
+     * 
+     */
     [RoutePrefix("api/Territories")]
     [Authorize(Roles = "Admin")]
     public class TerritoriesController : ApiController
@@ -58,92 +99,72 @@ namespace iS3.MiniServer
         }
 
         [HttpGet]
-        [Route("GetAllTerritoryDescs")]
-        public async Task<IHttpActionResult> GetAllTerritoryDescs()
+        [Route("GetAllTerritoryHandles")]
+        public async Task<IHttpActionResult> GetAllTerritoryHandles()
         {
-            ICollection<iS3TerritoryDesc> result = null;
-            result = await MiniServer.GetAllTerritoryDescs();
+            ICollection<iS3TerritoryHandle> result = null;
+            result = await MiniServer.GetAllTerritoryHandles();
             return Ok(result);
         }
 
         [HttpGet]
-        [Route("GetTerritoryDesc")]
-        public async Task<IHttpActionResult> GetTerritoryDesc(string NameOrID)
+        [Route("GetTerritoryHandle")]
+        public async Task<IHttpActionResult> GetTerritoryHandle(string nameOrID)
         {
-            if (NameOrID == null)
+            if (nameOrID == null)
             {
                 return BadRequest("Argument Null");
             }
 
-            iS3TerritoryDesc result = null;
-            result = await MiniServer.getTerritoryDesc(NameOrID);
+            iS3TerritoryHandle result = null;
+            result = await MiniServer.getTerritoryHandle(nameOrID);
+            return Ok(result);
+        }
+
+        [HttpGet]
+        [Route("GetDomainHandle")]
+        public async Task<IHttpActionResult> GetDomainHandle(string nameOrID, string parentNameOrID)
+        {
+            if (nameOrID == null)
+            {
+                return BadRequest("Argument Null");
+            }
+
+            iS3DomainHandle result = null;
+            result = await MiniServer.GetDomainHandle(nameOrID, parentNameOrID);
             return Ok(result);
         }
 
 
         [HttpPost]
         [Route("AddTerritory")]
-        public async Task<IHttpActionResult> AddTerritory(iS3TerritoryDesc desc)
+        public async Task<IHttpActionResult> AddTerritory(iS3TerritoryHandle handle)
         {
-            if (desc == null)
+            if (handle == null)
             {
                 return BadRequest("Argument Null");
             }
 
-            await MiniServer.AddTerritory(desc);
+            iS3TerritoryHandle newHandle = await MiniServer.AddTerritory(handle);
 
-            return Ok();
+            return Ok(newHandle);
         }
 
         [HttpPost]
         [Route("AddDomain")]
-        public async Task<IHttpActionResult> AddDomain(iS3DomainDesc desc)
+        public async Task<IHttpActionResult> AddDomain(iS3DomainHandle handle)
         {
-            if (desc == null)
+            if (handle == null)
             {
                 return BadRequest("Argument Null");
             }
 
-            await MiniServer.AddDomain(desc);       
+            iS3DomainHandle newHandle = await MiniServer.AddDomain(handle);       
 
-            return Ok();
+            return Ok(newHandle);
         }
 
 
-
-        //[HttpPost]
-        //[Route("GetDomainDesc")]
-        //public async Task<IHttpActionResult> GetDomainDesc1(iS3DomainDesc domain)
-        //{
-        //    if (domain == null)
-        //    {
-        //        return BadRequest("Argument Null");
-        //    }
-
-        //    iS3TerritoryDesc territory = null;
-        //    iS3DomainDesc result = null;
-        //    using (var ctx = new iS3MainDbContext())
-        //    {
-        //        territory = await getTerritoryDesc(domain.ParentID, ctx);
-        //        if (territory == null)
-        //        {
-        //            return BadRequest("Territory null and no default");
-        //        }
-
-        //        // explicit load domains
-        //        //
-        //        var entry = ctx.Entry(territory).Collection(t => t.DomainDescs);
-        //        var isLoaded = entry.IsLoaded;
-        //        await entry.LoadAsync();
-        //        isLoaded = entry.IsLoaded;
-
-        //        result = territory.GetDomainDesc(domain.ID);
-        //        if (result == null)
-        //            result = territory.GetDomainDesc(domain.Name);
-        //    }
-
-        //    return Ok(result);
-        //}
     }
 
 
