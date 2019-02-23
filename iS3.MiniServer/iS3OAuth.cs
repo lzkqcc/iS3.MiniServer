@@ -15,7 +15,7 @@ using Microsoft.Owin.Security.OAuth;
 using System.Security.Claims;
 
 /*
- * This file defines a few classes for account authentication and authorization.
+ * This file defines iS3 user account authentication and authorization classes.
  * 
  * 1. iS3User and iS3UserManager for account control
  * 2. iS3OAuthServerProvider for provding authenticaiton service

@@ -10,7 +10,7 @@ namespace iS3.MiniServer
 {
     public class iS3Geology : iS3Domain
     {
-        public iS3Geology(iS3DomainDesc desc) : base(desc)
+        public iS3Geology(iS3DomainHandle handle) : base(handle)
         { }
     }
 
@@ -24,7 +24,7 @@ namespace iS3.MiniServer
             Database.SetInitializer<iS3MainDbContext>(new DropCreateDatabaseAlways<iS3MainDbContext>());
         }
 
-        public DbSet<iS3TerritoryDesc> Territories { get; set; }
+        public DbSet<iS3TerritoryHandle> Territories { get; set; }
     }
 
     [RoutePrefix("api/Geology")]
