@@ -128,6 +128,7 @@ namespace iS3.MiniServer
         }
     }
 
+
     public class iS3Area
     {
         public iS3AreaHandle AreaHandle { get; set; }

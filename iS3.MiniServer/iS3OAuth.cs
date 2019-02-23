@@ -196,7 +196,8 @@ namespace iS3.MiniServer
         // The default database is specified here.
         //
         public iS3OAuthDbContext()
-            : base(MiniServer.DefaultDatabase) { }
+            : base(MiniServer.DefaultDatabase) {
+        }
 
         // Set database initializer, which will seed default Admin user.
         //
@@ -230,6 +231,7 @@ namespace iS3.MiniServer
     public class iS3OAuthDbInitializer
     //: DropCreateDatabaseIfModelChanges<iS3OAuthDbContext>
     : DropCreateDatabaseAlways<iS3OAuthDbContext>
+      //  :CreateDatabaseIfNotExists<iS3OAuthDbContext>
     {
         // Seed a default user: Admin
         //   Username=Admin, Password=iS3Admin, Role=Admin
@@ -309,7 +311,7 @@ namespace iS3.MiniServer
 
         [HttpPost]
         [Route("AddUser")]
-        [Authorize(Roles = "Admin")]
+        //[Authorize(Roles = "Admin")]
         // Add a new user according to:
         //      UserName, Password, Role
         //

@@ -35,7 +35,6 @@ namespace iS3.MiniServer
             //Database.SetInitializer<iS3TerritoryDbContext>(new DropCreateDatabaseIfModelChanges<iS3TerritoryDbContext>());
             Database.SetInitializer<iS3TerritoryDbContext>(new DropCreateDatabaseAlways<iS3TerritoryDbContext>());
         }
-
     }
 
     /*
@@ -78,6 +77,7 @@ curl -H "Authorization:Bearer $token1" http://localhost:$port/api/Territories/Ge
         [Route("SupportedTerritories")]
         public ICollection<string> SupportedTerritories()
         {
+            
             ICollection<string> result = MiniServer.GetSubClasses<iS3Territory>();
             return result;
         }

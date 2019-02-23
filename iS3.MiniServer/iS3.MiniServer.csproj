@@ -97,10 +97,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Help\UpdateModelHelp.cs" />
+    <Compile Include="iS3DGObject.cs" />
     <Compile Include="iS3Geology.cs" />
     <Compile Include="iS3Core.cs" />
+    <Compile Include="iS3Monitoring.cs" />
     <Compile Include="iS3OAuth.cs" />
     <Compile Include="iS3Territory.cs" />
+    <Compile Include="Monitoring\MonData.cs" />
+    <Compile Include="Monitoring\MonGroup.cs" />
+    <Compile Include="Monitoring\MonPoint.cs" />
+    <Compile Include="Monitoring\MonProject.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Startup.cs" />
